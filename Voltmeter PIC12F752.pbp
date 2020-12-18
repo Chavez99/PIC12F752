@@ -1,0 +1,71 @@
+; VOLTMETER WITH 3-DIGIT BCD COUNTER MC14553
+; PLUS 3 MC4543 DECODERs, Tested on 5/16/19 succesfully
+; PHASE SIGNAL DELIVERED BY C1A PIN FROM 4553
+; PIC12F752 V-TO-PULSE TRAIN
+; 5/13/2019 (c) 2019 Ricardo Jimenez
+; DIGITAL DESIGN,
+; RA0 pulse train, RA1 is LATCH, RA2 MCLR for 4553 *
+; Notes: AN3 is Voltage Input with a rAnge of 0.00-4.99 Vdc.*
+; VOLTAGE TO PULSE-TRAIN GENERATOR 12F752 W/CD4553
+;----------------------------------------
+DEFINE OSC 4;
+TRISA = %111000; RAO:RA2 SET AS OUTPUTS, RA3:RA5 INPUTS
+ANSELA= %011000; RA4/AN3 ANALOG, RA0:3, RA5 INPUTS
+PORTA = 0; SET PORT "A" AS 0
+OSCCON = %00100110; $26 SET XTAL Freq to 4MHZ
+OSCTUNE = %00000000; no tuning required
+FVRCON = %00000000; DISABLE FIXED V REF CONTROL REGISTER
+DACCON1 = %00000000; CLEAR REGISTER FOR DACCON1
+CM1CON0= 7; disable voltage comparators
+LATA= 0; Clear Latches on PORTA
+DEFINE ADC_CLOCK 3; 500 KHz clock source
+DEFINE SAMPLEUS 50; wait 50 uS after acquisition time of 20 uS
+ADCON0.7= 1; RIGTH JUSTIFIED
+STAY: ;
+ASM__CONFIG_MCLRE_OFF; RA3 Enabled as Input and /MCLR to Vdd
+; WPU.3= 1; pull-up Resistor in GP3 enabled
+V1 VAR WORD: V2 VAR WORD: VT VAR WORD: I VAR WORD
+D4 VAR WORD: D3 VAR BYTE: D2 VAR BYTE
+PULSES VAR WORD;
+PORTA.2= 1; RESET= 1, clear counter 4553
+PAUSE 1;
+PORTA.1= 1; LE = H
+pause 1;
+PORTA.0= 0; CLK = L
+RPT: PORTA.2=0; Reset= 0
+V1= 0: V2=0: VT=0;
+ADRESL= 0: ADRESH= 0;
+PAUSE 10;
+; taking A/D lecture on AN3
+ADCON0= %10001101; turn on ADC,
+pause 2;
+ADCON1= %01100000; select int clock/64= 8 uS
+pause 1;
+ADCON0.1= 1; start conversion GO/done
+pause 5;
+AD: IF ADCON0.1=1 THEN AD; wait for /done conversion bit
+PAUSE 2;
+MSR: V1 = ADRESL*5; convert binary to dec reading
+V2= ADRESH*1250; 4.88*256= 1250
+VT= V1+V2;
+D4 = VT DIG 3; getting the decimal equivalent digits
+D3 = VT DIG 2; DIG3.DIG2 DIG1 0.00 -- 4.99
+D2 = VT DIG 1;
+D4= D4*100;
+D3= D3*10;
+PULSES= D4+D3+D2;
+; converting reading to pulse train *****
+FOR I=1 TO PULSES;
+PULSOUT PORTA.0,100; 1mS pulse
+PAUSE 1; 1mS Low time
+NEXT I
+; /LATCH and RESET pulses for counter MC14553
+LR: PORTA.1= 0; Latch 2 mS \_/
+PAUSE 2;
+PORTA.1=1; Clear latch
+PAUSE 2
+PULSOUT PORTA.2,100; Reset 1 mS /=\
+PAUSE 200; wait 250 mS before taking a new reading
+GOTO RPT;
+END
+
